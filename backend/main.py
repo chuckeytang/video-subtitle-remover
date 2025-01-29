@@ -542,7 +542,18 @@ class SubtitleRemover:
         self.video_temp_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
         # 创建视频写对象
         self.video_writer = cv2.VideoWriter(self.video_temp_file.name, cv2.VideoWriter_fourcc(*'mp4v'), self.fps, self.size)
-        self.video_out_name = os.path.join(os.path.dirname(self.video_path), f'{self.vd_name}_no_sub.mp4')
+
+        # 修改输出路径逻辑
+        # 获取视频所在目录的上级目录
+        parent_dir = os.path.dirname(os.path.dirname(self.video_path))
+        # 在上级目录添加后缀 _nosub 的新目录
+        nosub_dir = os.path.join(parent_dir, f"{os.path.basename(os.path.dirname(self.video_path))}_nosub")
+        # 如果目录不存在，则新建
+        if not os.path.exists(nosub_dir):
+            os.makedirs(nosub_dir)
+        # 在新目录中保存视频，保持视频文件名不变
+        self.video_out_name = os.path.join(nosub_dir, f"{self.vd_name}.mp4")
+        
         self.video_inpaint = None
         self.lama_inpaint = None
         self.ext = os.path.splitext(vd_path)[-1]
@@ -560,7 +571,7 @@ class SubtitleRemover:
         # 预览帧
         self.preview_frame = None
         # 是否将原音频嵌入到去除字幕后的视频
-        self.is_successful_merged = False
+        self.is_successful_merged = True
 
     @staticmethod
     def get_coordinates(dt_box):
@@ -907,17 +918,34 @@ class SubtitleRemover:
                     print("Unable to copy file. %s" % e)
             self.video_temp_file.close()
 
-
-if __name__ == '__main__':
-    multiprocessing.set_start_method("spawn")
-    # 1. 提示用户输入视频路径
-    video_path = input(f"Please input video or image file path: ").strip()
-    # 判断视频路径是不是一个目录，是目录的化，批量处理改目录下的所有视频文件
-    # 2. 按以下顺序传入字幕区域
-    # sub_area = (ymin, ymax, xmin, xmax)
-    # 3. 新建字幕提取对象
+def process_video(video_path, sub_area):
+    """处理单个视频或图片文件"""
     if is_video_or_image(video_path):
-        sd = SubtitleRemover(video_path, sub_area=None)
+        sd = SubtitleRemover(video_path, sub_area=sub_area)
         sd.run()
     else:
         print(f'Invalid video path: {video_path}')
+
+if __name__ == '__main__':
+    multiprocessing.set_start_method("spawn")
+
+    # 1. 提示用户输入视频路径
+    video_path = './prod/'
+
+    # 2. 动态输入字幕区域
+    xmin = 540
+    xmax = 720
+    ymin = 1225
+    ymax = 1280
+    sub_area = (ymin, ymax, xmin, xmax)
+
+    # 3. 判断是否为目录
+    if os.path.isdir(video_path):
+        # 遍历目录下的所有文件
+        for root, _, files in os.walk(video_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                process_video(file_path, sub_area)
+    else:
+        # 单文件处理
+        process_video(video_path, sub_area)
